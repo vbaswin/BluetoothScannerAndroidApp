@@ -7,6 +7,9 @@ import java.util.Set;
 import android.content.IntentFilter;
 
 import android.nfc.Tag;
+import android.os.AsyncTask;
+import android.os.Build;
+import android.os.Looper;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
@@ -28,6 +31,7 @@ import androidx.activity.EdgeToEdge;
 import android.os.Handler;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.Insets;
@@ -64,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_DISCOVER_BLUETOOTH = 2;
     private static final int REQUEST_FINE_LOCATION_PERMISSION = 100;
 
+    private Handler mHandler;
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bluetoothLeScanner;
@@ -72,26 +77,48 @@ public class MainActivity extends AppCompatActivity {
     private boolean isScanning = false;
     private ArrayList<BluetoothDevice> devices = new ArrayList<>();
 
+    private BluetoothAdapter.LeScanCallback mLeScanCallback =
+            new BluetoothAdapter.LeScanCallback() {
 
-    private ScanCallback scanCallback = new ScanCallback() {
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            super.onScanResult(callbackType, result);
-            Log.d(TAG, "inside onScanResult");
-            BluetoothDevice device = result.getDevice();
-            if (!devices.contains(device)) {
-                devices.add(device);
-                String info = device.getName() + " - " + device.getAddress();
-                updateDeviceInfo(info);
-            }
-        }
-    };
+                @Override
+                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.d(TAG, device.getName());
+                        }
+//                            mLeDeviceListAdapter.addDevice(device);
+//                            mLeDeviceListAdapter.notifyDataSetChanged();
+//                        }
+                    });
+                }
+            };
 
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Define the permissions you need
+        String[] permissions = {
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+        };
+
+        int REQUEST_CODE = 1;
+// Check each permission
+        for (String permission : permissions) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                // Permission is not granted, request for permission
+                ActivityCompat.requestPermissions(this, new String[]{permission}, REQUEST_CODE++);
+            }
+        }
 
         deviceInfos = findViewById(R.id.DeviceInfos);
         scanButton = findViewById(R.id.ScanButton);
@@ -112,43 +139,78 @@ public class MainActivity extends AppCompatActivity {
             checkLocationPermission();
         }
 
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(this, "BLE not supported", Toast.LENGTH_SHORT).show();
+            finish();
+        }
+
+        mHandler = new Handler(Looper.getMainLooper());
+
         displayPairedDevices();
         scanButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (!isScanning) {
                     startScan();
-                    scanButton.setText("Stop Scan");
-                    int color = Color.parseColor("#FFF44336"); // Parse the color code
-                    scanButton.setBackgroundColor(color);
+                    scanLeDevice(true);
+
                 } else {
                     stopScan();
-                    scanButton.setText("Start Scan");
-                    int color = Color.parseColor("#FF4CAF50"); // Parse the color code
-                    scanButton.setBackgroundColor(color);
+                    scanLeDevice(false);
+
                 }
                 isScanning = !isScanning;
             }
         });
     }
 
+
+    private void scanLeDevice(final boolean enable) {
+        if (enable) {
+            // Stops scanning after a pre-defined scan period.
+            mHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    isScanning = false;
+                    bluetoothAdapter.stopLeScan(mLeScanCallback);
+//                    invalidateOptionsMenu();
+                    stopScan();
+                }
+            }, 10000);
+
+            isScanning = true;
+            bluetoothAdapter.startLeScan(mLeScanCallback);
+            startScan();
+        } else {
+            isScanning = false;
+            bluetoothAdapter.stopLeScan(mLeScanCallback);
+            stopScan();
+        }
+//        invalidateOptionsMenu();
+    }
+
     private void startScan() {
-//        Log.d(TAG, "Inside start scan");
+        Log.d(TAG, "Inside start scan");
         devices.clear();
         displayPairedDevices();
-        deviceInfos.append("\n\nAvailable Devices\n\n");
-        bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-        Log.d(TAG, "BluetoothLeScanner: " + bluetoothLeScanner); // Verify BluetoothLeScanner object
-        bluetoothLeScanner.startScan(scanCallback);
-        Log.d(TAG, "Scan started with callback: " + scanCallback); // Verify callback registration
+
+        scanButton.setText("Stop Scan");
+        int color = Color.parseColor("#FFF44336"); // Parse the color code
+        scanButton.setBackgroundColor(color);
+
+//        deviceInfos.append("\n\nAvailable Devices\n\n");
+//        bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+//        Log.d(TAG, "BluetoothLeScanner: " + bluetoothLeScanner); // Verify BluetoothLeScanner object
+//        Log.d(TAG, "Scan started with callback: " + scanCallback); // Verify callback registration
     }
 
     private void stopScan() {
-//        Log.d(TAG, "Inside stop scan");
-        if (bluetoothLeScanner != null) {
-            bluetoothLeScanner.stopScan(scanCallback);
-        }
+        Log.d(TAG, "Inside stop scan");
         displayPairedDevices();
+
+        scanButton.setText("Start Scan");
+        int color = Color.parseColor("#FF4CAF50"); // Parse the color code
+        scanButton.setBackgroundColor(color);
     }
 
     private void updateDeviceInfo(final String info) {
@@ -159,6 +221,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
     private void displayPairedDevices() {
         deviceInfos.setText("");
         deviceInfos.append("Paired Devices\n\n");
@@ -191,7 +254,7 @@ public class MainActivity extends AppCompatActivity {
             if (grantResults.length > 0
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted, start scanning
-                startScan();
+//                startScan();
             } else {
                 Log.d(TAG, "fine location permission denied");
             }
@@ -200,193 +263,7 @@ public class MainActivity extends AppCompatActivity {
 
     protected void onDestroy() {
         super.onDestroy();
-        stopScan();
+//        stopScan();
     }
 
-
 }
-
-//
-//public class MainActivity extends AppCompatActivity {
-//    private BluetoothAdapter bluetoothAdapter;
-//    private TextView deviceInfos;
-//    private Button scanButton;
-//    private Boolean notScanning = true;
-//    private ArrayList<BluetoothDevice> devices = new ArrayList<>();
-//    //    private static final int REQUEST_CODE_PERMISSIONS = 1;
-////    private static final int REQUEST_CODE_SCAN_PERMISSION = 2;
-////
-//    private static final int REQUEST_ENABLE_BLUETOOTH = 1;
-//    private static final int REQUEST_DISCOVER_BLUETOOTH = 2;
-//    private static final int REQUEST_CODE_LOCATION_PERMISSION = 100;
-//
-//
-//    private static final String TAG = "MainActivity";
-//
-//    private BluetoothLeScanner bluetoothLeScanner;
-//    private boolean scanning;
-//    private Handler handler = new Handler();
-////    private LeDeviceListAdapter leDeviceListAdapter = new LeDeviceListAdapter();
-//
-//
-//    // Stops scanning after 10 seconds.
-//    private static final long SCAN_PERIOD = 10000;
-//
-//    private ScanCallback leScanCallback =
-//            new ScanCallback() {
-//                @Override
-//                public void onScanResult(int callbackType, ScanResult result) {
-//                    Log.d(TAG, "inside onScanResult");
-//                    super.onScanResult(callbackType, result);
-//
-//                    deviceInfos.append(result.getDevice().getName());
-////                    leDeviceListAdapter.notifyDataSetChanged();
-//                }
-//            };
-//
-//
-//    @Override
-//    protected void onCreate(Bundle savedInstanceState) {
-//        super.onCreate(savedInstanceState);
-//        EdgeToEdge.enable(this);
-//        setContentView(R.layout.activity_main);
-//
-//        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-//            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-//            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-//            return insets;
-//
-//        });
-//
-//        scanButton = findViewById(R.id.ScanButton);
-//        deviceInfos = findViewById(R.id.DeviceInfos);
-//
-//        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-//                != PackageManager.PERMISSION_GRANTED) {
-//            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-//                    REQUEST_CODE_LOCATION_PERMISSION);
-//        }
-//
-//        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-//        bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-//
-//        Intent intent = new Intent(bluetoothAdapter.ACTION_REQUEST_ENABLE);
-//        startActivityForResult(intent, REQUEST_ENABLE_BLUETOOTH);
-//
-//
-//        deviceInfos.setText("");
-//        deviceInfos.append("Paired Devices\n\n");
-//        if (bluetoothAdapter.isEnabled()) {
-//            Set<BluetoothDevice> devices = bluetoothAdapter.getBondedDevices();
-//
-//            for (BluetoothDevice device : devices) {
-//                deviceInfos.append("\n Device : " + device.getName() + " , " + device);
-//            }
-//        } else {
-//            Log.d(TAG, "Turn On bluetooth to get paired devices");
-//        }
-//        deviceInfos.append("\n\nAvailable Devices\n\n");
-//
-//        scanButton.setOnClickListener(new View.OnClickListener() {
-//            public void onClick(View v) {
-//
-//                if (notScanning) {
-//
-//                    scanButton.setText("Stop Scan");
-//                    int color = Color.parseColor("#FFF44336"); // Parse the color code
-//                    scanButton.setBackgroundColor(color);
-//
-//
-////                    bluetoothAdapter.startDiscovery();
-//
-//
-////                    if (!bluetoothAdapter.isDiscovering()) {
-////
-////                        Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
-////                        discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300);
-////                        startActivityForResult(discoverableIntent, REQUEST_DISCOVER_BLUETOOTH);
-////                        devices.clear();
-////                        bluetoothAdapter.startDiscovery();
-////                    }
-//                    bluetoothLeScanner.startScan(leScanCallback);
-////                    if (bluetoothAdapter.isEnabled()) {
-////                        Log.d(TAG, "Adapter enabled");
-////                    } else
-////                        Log.d(TAG, "Adapter enabled");
-//                    if (bluetoothAdapter.isDiscovering()) {
-//                        Log.d(TAG, "isDiscovering");
-//                    } else
-//                        Log.d(TAG, "not discovering");
-//                } else {
-//                    bluetoothAdapter.cancelDiscovery();
-//                    scanButton.setText("Start Scan");
-//                    int color = Color.parseColor("#FF4CAF50"); // Parse the color code
-//                    scanButton.setBackgroundColor(color);
-//                }
-//                notScanning = !notScanning;
-//            }
-//        });
-//
-//
-//        // Register for broadcasts when a device is discovered.
-//        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-//        registerReceiver(receiver, filter);
-//
-//    }
-//    private void scanLeDevice() {
-//        if (!scanning) {
-//            // Stops scanning after a predefined scan period.
-//            handler.postDelayed(new Runnable() {
-//                @Override
-//                public void run() {
-//                    scanning = false;
-//                    bluetoothLeScanner.stopScan(leScanCallback);
-//                }
-//            }, SCAN_PERIOD);
-//
-//            scanning = true;
-//            bluetoothLeScanner.startScan(leScanCallback);
-//        } else {
-//            scanning = false;
-//            bluetoothLeScanner.stopScan(leScanCallback);
-//        }
-//    }
-//
-//    @Override
-//    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-//        super.onActivityResult(requestCode, resultCode, data);
-//
-//        switch (requestCode) {
-//            case REQUEST_ENABLE_BLUETOOTH:
-//                if (resultCode == RESULT_OK) {
-//                    Log.d(TAG, "Bluetooth is on");
-//                } else
-//                    Log.d(TAG, "Bluetooth is off");
-//                break;
-//        }
-//    }
-//    private final BroadcastReceiver receiver = new BroadcastReceiver() {
-//        public void onReceive(Context context, Intent intent) {
-//            Log.d(TAG, "inside onReceive");
-//            String action = intent.getAction();
-//            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-//                // Discovery has found a device. Get the BluetoothDevice
-//                // object and its info from the Intent.
-//                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-//                String deviceName = device.getName();
-//                String deviceHardwareAddress = device.getAddress(); // MAC address
-//                deviceInfos.append("Name: " + deviceName + ", MAC Address: " + deviceHardwareAddress + "\n");
-//            }
-//        }
-//    };
-//
-//    protected void onDestroy() {
-//        super.onDestroy();
-//
-//        unregisterReceiver(receiver);
-//
-//        // optional and not recommended
-////        bluetoothAdapter.disable();     // disable bluetooth when app stops
-//    }
-//
-//}
