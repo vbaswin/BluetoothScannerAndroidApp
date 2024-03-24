@@ -1,15 +1,18 @@
 package com.example.bluetoothscanner;
 
+import android.content.DialogInterface;
 import android.content.Intent;
 
 import java.util.Set;
 
 import android.content.IntentFilter;
 
+import android.net.Uri;
 import android.nfc.Tag;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Looper;
+import android.provider.Settings;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
@@ -32,6 +35,7 @@ import android.os.Handler;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.Insets;
@@ -61,6 +65,7 @@ import androidx.core.content.ContextCompat;
 
 import android.bluetooth.BluetoothDevice;
 
+@RequiresApi(api = Build.VERSION_CODES.S)
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
@@ -69,6 +74,17 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_FINE_LOCATION_PERMISSION = 100;
 
     private Handler mHandler;
+
+    private int permissionIndex = 0;
+    private static final int REQUEST_CODE = 1;
+    private String[] permissions = {
+            Manifest.permission.BLUETOOTH,
+            Manifest.permission.BLUETOOTH_ADMIN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+    };
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bluetoothLeScanner;
@@ -101,24 +117,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Define the permissions you need
-        String[] permissions = {
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-        };
-
-        int REQUEST_CODE = 1;
-// Check each permission
-        for (String permission : permissions) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                // Permission is not granted, request for permission
-                ActivityCompat.requestPermissions(this, new String[]{permission}, REQUEST_CODE++);
-            }
-        }
+        requestNextPermission();
 
         deviceInfos = findViewById(R.id.DeviceInfos);
         scanButton = findViewById(R.id.ScanButton);
@@ -163,6 +162,8 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+
 
 
     private void scanLeDevice(final boolean enable) {
@@ -246,17 +247,29 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                                           int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_FINE_LOCATION_PERMISSION) {
-            // If request is cancelled, the result arrays are empty.
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission granted, start scanning
-//                startScan();
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission was granted, request next permission
+                permissionIndex++;
+                requestNextPermission();
             } else {
-                Log.d(TAG, "fine location permission denied");
+                // Permission was denied. You can handle it here.
+                new AlertDialog.Builder(this)
+                        .setMessage("This permission is important for the app.")
+                        .setPositiveButton("Open Settings", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                Uri uri = Uri.fromParts("package", getPackageName(), null);
+                                intent.setData(uri);
+                                startActivity(intent);
+                            }
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .create()
+                        .show();
+
             }
         }
     }
@@ -264,6 +277,37 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
 //        stopScan();
+    }
+
+    private void requestNextPermission() {
+        if (permissionIndex < permissions.length) {
+            if (ContextCompat.checkSelfPermission(this, permissions[permissionIndex]) != PackageManager.PERMISSION_GRANTED) {
+                // Permission is not granted, request for permission
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[permissionIndex])) {
+                    // Show an explanation to the user *asynchronously* -- don't block
+                    // this thread waiting for the user's response! After the user
+                    // sees the explanation, try again to request the permission.
+                    // You can show a dialog or a toast here.
+                } else {
+                    // No explanation needed; request the permission
+                    ActivityCompat.requestPermissions(this, new String[]{permissions[permissionIndex]}, REQUEST_CODE);
+//                    requestNextPermission();
+                }
+
+                } else {
+                permissionIndex++;
+                requestNextPermission();
+            }
+        }
+//        while (ContextCompat.checkSelfPermission(this, permissions[permissionIndex]) != PackageManager.PERMISSION_GRANTED) {
+//            // Permission is not granted, request for permission
+//            ActivityCompat.requestPermissions(this, new String[]{permissions[permissionIndex]}, REQUEST_CODE);
+//        }
+//        // Permission is granted, move to next permission
+//        permissionIndex++;
+//        if (permissionIndex < permissions.length) {
+//            requestNextPermission();
+//        }
     }
 
 }
