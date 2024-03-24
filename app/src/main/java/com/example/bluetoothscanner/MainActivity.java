@@ -6,6 +6,7 @@ import java.util.Set;
 
 import android.content.IntentFilter;
 
+import android.nfc.Tag;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
@@ -17,6 +18,7 @@ import android.widget.Button;
 
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
@@ -55,29 +57,35 @@ import androidx.core.content.ContextCompat;
 
 import android.bluetooth.BluetoothDevice;
 
-public class MainActivity extends AppCompatActivity implements BluetoothAdapter.LeScanCallback {
+public class MainActivity extends AppCompatActivity {
 
-    private BluetoothAdapter bluetoothAdapter;
-    private TextView deviceInfos;
-    private Button scanButton;
     private static final String TAG = "MainActivity";
-
     private static final int REQUEST_ENABLE_BLUETOOTH = 1;
     private static final int REQUEST_DISCOVER_BLUETOOTH = 2;
+    private static final int REQUEST_FINE_LOCATION_PERMISSION = 100;
 
+
+    private BluetoothAdapter bluetoothAdapter;
+    private BluetoothLeScanner bluetoothLeScanner;
+    private TextView deviceInfos;
+    private Button scanButton;
     private boolean isScanning = false;
     private ArrayList<BluetoothDevice> devices = new ArrayList<>();
-    private ScanCallback leScanCallback =
-            new ScanCallback() {
-                @Override
-                public void onScanResult(int callbackType, ScanResult result) {
-                    Log.d(TAG, "inside onScanResult");
-                    super.onScanResult(callbackType, result);
 
-                    deviceInfos.append(result.getDevice().getAddress());
-//                    leDeviceListAdapter.notifyDataSetChanged();
-                }
-            };
+
+    private ScanCallback scanCallback = new ScanCallback() {
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+            super.onScanResult(callbackType, result);
+            Log.d(TAG, "inside onScanResult");
+            BluetoothDevice device = result.getDevice();
+            if (!devices.contains(device)) {
+                devices.add(device);
+                String info = device.getName() + " - " + device.getAddress();
+                updateDeviceInfo(info);
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,15 +97,27 @@ public class MainActivity extends AppCompatActivity implements BluetoothAdapter.
         scanButton = findViewById(R.id.ScanButton);
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        Intent intent = new Intent(bluetoothAdapter.ACTION_REQUEST_ENABLE);
-        startActivityForResult(intent, REQUEST_ENABLE_BLUETOOTH);
+        if (bluetoothAdapter == null) {
+            // Device doesn't support Bluetooth
+            Log.e(TAG, "Bluetooth not supported on this device");
+            finish();
+            return;
+        }
+        if (!bluetoothAdapter.isEnabled()) {
+            // Request to enable Bluetooth if it's disabled
+            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH);
+        } else {
+            // Bluetooth is enabled, check and request location permission
+            checkLocationPermission();
+        }
 
         displayPairedDevices();
         scanButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (!isScanning) {
-                    scanForDevices();
+                    startScan();
                     scanButton.setText("Stop Scan");
                     int color = Color.parseColor("#FFF44336"); // Parse the color code
                     scanButton.setBackgroundColor(color);
@@ -112,13 +132,33 @@ public class MainActivity extends AppCompatActivity implements BluetoothAdapter.
         });
     }
 
-    private void scanForDevices() {
+    private void startScan() {
+//        Log.d(TAG, "Inside start scan");
         devices.clear();
         displayPairedDevices();
         deviceInfos.append("\n\nAvailable Devices\n\n");
-        bluetoothAdapter.startLeScan(this);
+        bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+        Log.d(TAG, "BluetoothLeScanner: " + bluetoothLeScanner); // Verify BluetoothLeScanner object
+        bluetoothLeScanner.startScan(scanCallback);
+        Log.d(TAG, "Scan started with callback: " + scanCallback); // Verify callback registration
     }
 
+    private void stopScan() {
+//        Log.d(TAG, "Inside stop scan");
+        if (bluetoothLeScanner != null) {
+            bluetoothLeScanner.stopScan(scanCallback);
+        }
+        displayPairedDevices();
+    }
+
+    private void updateDeviceInfo(final String info) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                deviceInfos.append("\n" + info);
+            }
+        });
+    }
     private void displayPairedDevices() {
         deviceInfos.setText("");
         deviceInfos.append("Paired Devices\n\n");
@@ -133,29 +173,37 @@ public class MainActivity extends AppCompatActivity implements BluetoothAdapter.
         }
     }
 
-    private void stopScan() {
-        bluetoothAdapter.stopLeScan(this);
-        displayPairedDevices();
-    }
-
-    @Override
-    public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
-        Log.d(TAG, "inside onLeScan");
-        if (!devices.contains(device)) {
-            devices.add(device);
-            String info = device.getName() + " - " + device.getAddress();
-            Log.d(TAG, info);
-            deviceInfos.append("\n" + info);
+    private void checkLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted, request it
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                    REQUEST_FINE_LOCATION_PERMISSION);
         }
     }
 
-    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_FINE_LOCATION_PERMISSION) {
+            // If request is cancelled, the result arrays are empty.
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, start scanning
+                startScan();
+            } else {
+                Log.d(TAG, "fine location permission denied");
+            }
+        }
+    }
+
     protected void onDestroy() {
         super.onDestroy();
-        if (isScanning) {
-            stopScan();
-        }
+        stopScan();
     }
+
+
 }
 
 //
