@@ -13,19 +13,17 @@
         android:layout_height="wrap_content"
         android:background="#4CAF50"
         android:text="START SCAN"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/listView"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.498"
+        app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.2" />
+        app:layout_constraintVertical_bias="0.5" />
 
-    <TextView
-        android:id="@+id/DeviceInfos"
-        android:layout_width="294dp"
-        android:layout_height="335dp"
-        android:text="Device informations"
-        android:textAlignment="center"
+    <ListView
+        android:id="@+id/listView"
+        android:layout_width="352dp"
+        android:layout_height="418dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.5"

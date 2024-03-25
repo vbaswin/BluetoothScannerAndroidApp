@@ -3,6 +3,10 @@ package com.example.bluetoothscanner;
 import android.content.DialogInterface;
 import android.content.Intent;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import android.content.IntentFilter;
@@ -11,9 +15,16 @@ import android.net.Uri;
 import android.nfc.Tag;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.content.Context;
+import android.content.Intent;
+import android.location.LocationManager;
+import android.provider.Settings;
+
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.Toast;
 
 import android.content.pm.PackageManager;
@@ -90,8 +101,25 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothLeScanner bluetoothLeScanner;
     private TextView deviceInfos;
     private Button scanButton;
+    private ListView listView;
     private boolean isScanning = false;
+    ArrayAdapter<String> adapter;
+
+
     private ArrayList<BluetoothDevice> devices = new ArrayList<>();
+
+    private Map<String, DeviceInfo> uniqueDevices = new HashMap<>();
+    private Map<Long, Map<String, DeviceInfo>> scans = new HashMap<>();
+
+
+//    private Runnable mRunnable = new Runnable() {
+//        @Override
+//        public void run() {
+//            startScan();
+////            bluetoothAdapter.startLeScan(mLeScanCallback);
+//            mHandler.postDelayed(this, 6000);
+//        }
+//    };
 
     private BluetoothAdapter.LeScanCallback mLeScanCallback =
             new BluetoothAdapter.LeScanCallback() {
@@ -101,7 +129,15 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            Log.d(TAG, device.getName());
+                            Log.d(TAG, "Inside onLeScan");
+//                            deviceInfos.append(device.getName() + " " + device.getAddress() + "\n");
+                            String timestamp = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date());
+//                            deviceInfos.append( timestamp + " -- " +
+//                                     rssi + " -- " +
+//                                     device.getAddress() + "\n\n");
+//                            uniqueDevices.put(device.getAddress(), new DeviceInfo(rssi, device.getAddress()), timestamp);
+                            adapter.add(String.valueOf(rssi)  + " " +  device.getAddress());
+                            adapter.notifyDataSetChanged();
                         }
 //                            mLeDeviceListAdapter.addDevice(device);
 //                            mLeDeviceListAdapter.notifyDataSetChanged();
@@ -119,8 +155,9 @@ public class MainActivity extends AppCompatActivity {
 
         requestNextPermission();
 
-        deviceInfos = findViewById(R.id.DeviceInfos);
+//        deviceInfos = findViewById(R.id.DeviceInfos);
         scanButton = findViewById(R.id.ScanButton);
+        listView = findViewById(R.id.listView);
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
@@ -129,13 +166,16 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
+        if (!isLocationEnabled()) {
+            // Request to enable Location Services if it's disabled
+            Intent enableLocationIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            startActivity(enableLocationIntent);
+        }
+
         if (!bluetoothAdapter.isEnabled()) {
             // Request to enable Bluetooth if it's disabled
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH);
-        } else {
-            // Bluetooth is enabled, check and request location permission
-            checkLocationPermission();
         }
 
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -143,20 +183,21 @@ public class MainActivity extends AppCompatActivity {
             finish();
         }
 
-        mHandler = new Handler(Looper.getMainLooper());
+//        mHandler = new Handler(Looper.getMainLooper());
 
-        displayPairedDevices();
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<String>());
+        listView.setAdapter(adapter);
+
+//        displayPairedDevices();
         scanButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (!isScanning) {
+//                    mHandler.post(mRunnable); // Start the Runnable
                     startScan();
-                    scanLeDevice(true);
-
                 } else {
                     stopScan();
-                    scanLeDevice(false);
-
+//                    mHandler.removeCallbacks(mRunnable); // Stop the Runnable
                 }
                 isScanning = !isScanning;
             }
@@ -166,53 +207,41 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void scanLeDevice(final boolean enable) {
-        if (enable) {
-            // Stops scanning after a pre-defined scan period.
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    isScanning = false;
-                    bluetoothAdapter.stopLeScan(mLeScanCallback);
-//                    invalidateOptionsMenu();
-                    stopScan();
-                }
-            }, 10000);
-
-            isScanning = true;
-            bluetoothAdapter.startLeScan(mLeScanCallback);
-            startScan();
-        } else {
-            isScanning = false;
-            bluetoothAdapter.stopLeScan(mLeScanCallback);
-            stopScan();
-        }
-//        invalidateOptionsMenu();
-    }
-
     private void startScan() {
         Log.d(TAG, "Inside start scan");
         devices.clear();
-        displayPairedDevices();
 
         scanButton.setText("Stop Scan");
         int color = Color.parseColor("#FFF44336"); // Parse the color code
         scanButton.setBackgroundColor(color);
+        bluetoothAdapter.startLeScan(mLeScanCallback);
 
-//        deviceInfos.append("\n\nAvailable Devices\n\n");
-//        bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-//        Log.d(TAG, "BluetoothLeScanner: " + bluetoothLeScanner); // Verify BluetoothLeScanner object
-//        Log.d(TAG, "Scan started with callback: " + scanCallback); // Verify callback registration
+        long timestamp = System.currentTimeMillis();
+        uniqueDevices = new HashMap<>();
+        scans.put(timestamp, uniqueDevices);
+
+//        mHandler.post(mRunnable); // Start the Runnable
     }
 
     private void stopScan() {
         Log.d(TAG, "Inside stop scan");
-        displayPairedDevices();
 
         scanButton.setText("Start Scan");
         int color = Color.parseColor("#FF4CAF50"); // Parse the color code
         scanButton.setBackgroundColor(color);
+
+//        mHandler.removeCallbacks(mRunnable); // Stop the Runnable
+        bluetoothAdapter.stopLeScan(mLeScanCallback);
     }
+
+    private boolean isLocationEnabled() {
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+    }
+
+
+
 
     private void updateDeviceInfo(final String info) {
         runOnUiThread(new Runnable() {
@@ -223,19 +252,19 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void displayPairedDevices() {
-        deviceInfos.setText("");
-        deviceInfos.append("Paired Devices\n\n");
-        if (bluetoothAdapter.isEnabled()) {
-            Set<BluetoothDevice> devices = bluetoothAdapter.getBondedDevices();
-
-            for (BluetoothDevice device : devices) {
-                deviceInfos.append("\n Device : " + device.getName() + " , " + device);
-            }
-        } else {
-            Log.d(TAG, "Turn On bluetooth to get paired devices");
-        }
-    }
+//    private void displayPairedDevices() {
+//        deviceInfos.setText("");
+//        deviceInfos.append("Paired Devices\n\n");
+//        if (bluetoothAdapter.isEnabled()) {
+//            Set<BluetoothDevice> devices = bluetoothAdapter.getBondedDevices();
+//
+//            for (BluetoothDevice device : devices) {
+//                deviceInfos.append("\n Device : " + device.getName() + " , " + device);
+//            }
+//        } else {
+//            Log.d(TAG, "Turn On bluetooth to get paired devices");
+//        }
+//    }
 
     private void checkLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
