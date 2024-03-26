@@ -11,6 +11,8 @@ public class DeviceInfo {
         this.timestamp = timestamp;
     }
 
-    // getters and setters
+    public String getRssi() {
+        return String.valueOf(this.rssi);
+    }
 }
 

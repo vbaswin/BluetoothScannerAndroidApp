@@ -1,80 +1,41 @@
 package com.example.bluetoothscanner;
 
-import android.content.DialogInterface;
-import android.content.Intent;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
-import android.content.IntentFilter;
-
-import android.net.Uri;
-import android.nfc.Tag;
-import android.os.AsyncTask;
-import android.os.Build;
+import android.Manifest;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.le.BluetoothLeScanner;
 import android.content.Context;
 import android.content.Intent;
-import android.location.LocationManager;
-import android.provider.Settings;
-
-import android.os.Looper;
-import android.provider.Settings;
-import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.ListView;
-import android.widget.Toast;
-
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.location.LocationManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.bluetooth.BluetoothAdapter;
-import android.widget.Button;
-
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
-
-import androidx.activity.EdgeToEdge;
-
 import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.util.Log;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.ListView;
+import android.widget.TextView;
+import android.widget.Toast;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.graphics.Insets;
-
-import android.Manifest;
-
-import androidx.core.view.ViewCompat;
-
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.le.BluetoothLeScanner; // for API level > 18
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.TextView;
-import android.content.Context;
-
-import androidx.core.view.WindowInsetsCompat;
-
-import android.content.BroadcastReceiver;
-
-import android.util.Log;
-
-import java.util.ArrayList;
-
 import androidx.core.content.ContextCompat;
 
-import android.bluetooth.BluetoothDevice;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
 
 @RequiresApi(api = Build.VERSION_CODES.S)
 public class MainActivity extends AppCompatActivity {
@@ -103,47 +64,35 @@ public class MainActivity extends AppCompatActivity {
     private Button scanButton;
     private ListView listView;
     private boolean isScanning = false;
+    private boolean firstTime = true;
     ArrayAdapter<String> adapter;
 
 
     private ArrayList<BluetoothDevice> devices = new ArrayList<>();
 
-    private Map<String, DeviceInfo> uniqueDevices = new HashMap<>();
-    private Map<Long, Map<String, DeviceInfo>> scans = new HashMap<>();
+    private Map<String, DeviceInfo> uniqueDevices = new TreeMap<>();
+    private Map<Long, Map<String, DeviceInfo>> scans = new TreeMap<>(Collections.reverseOrder());
 
 
-//    private Runnable mRunnable = new Runnable() {
-//        @Override
-//        public void run() {
-//            startScan();
-////            bluetoothAdapter.startLeScan(mLeScanCallback);
-//            mHandler.postDelayed(this, 6000);
-//        }
-//    };
+    private Runnable mRunnable = new Runnable() {
+        @Override
+        public void run() {
+            addToListView();
+            mHandler.postDelayed(this, 6000);
+        }
+    };
 
     private BluetoothAdapter.LeScanCallback mLeScanCallback =
-            new BluetoothAdapter.LeScanCallback() {
-
-                @Override
-                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            Log.d(TAG, "Inside onLeScan");
-//                            deviceInfos.append(device.getName() + " " + device.getAddress() + "\n");
-                            String timestamp = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date());
-//                            deviceInfos.append( timestamp + " -- " +
-//                                     rssi + " -- " +
-//                                     device.getAddress() + "\n\n");
-//                            uniqueDevices.put(device.getAddress(), new DeviceInfo(rssi, device.getAddress()), timestamp);
-                            adapter.add(String.valueOf(rssi)  + " " +  device.getAddress());
-                            adapter.notifyDataSetChanged();
-                        }
-//                            mLeDeviceListAdapter.addDevice(device);
+            (device, rssi, scanRecord) -> {
+                //                            mLeDeviceListAdapter.addDevice(device);
 //                            mLeDeviceListAdapter.notifyDataSetChanged();
 //                        }
-                    });
-                }
+                runOnUiThread(() -> {
+//                            uniqueDevices.put(device.getAddress(), new DeviceInfo(rssi, device.getAddress()), timestamp);
+                    uniqueDevices.put(device.getAddress(), new DeviceInfo(rssi, device.getAddress(), System.currentTimeMillis()));
+//                            adapter.add(String.valueOf(rssi)  + " " +  device.getAddress());
+//                            adapter.notifyDataSetChanged();
+                });
             };
 
 
@@ -183,24 +132,26 @@ public class MainActivity extends AppCompatActivity {
             finish();
         }
 
-//        mHandler = new Handler(Looper.getMainLooper());
+        mHandler = new Handler(Looper.getMainLooper());
 
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<String>());
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
         listView.setAdapter(adapter);
 
+
 //        displayPairedDevices();
-        scanButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (!isScanning) {
-//                    mHandler.post(mRunnable); // Start the Runnable
-                    startScan();
-                } else {
-                    stopScan();
-//                    mHandler.removeCallbacks(mRunnable); // Stop the Runnable
+        scanButton.setOnClickListener(v -> {
+            if (!isScanning) {
+                startScan();
+                if (firstTime) {
+//                    addToListView();
+                    firstTime = false;
                 }
-                isScanning = !isScanning;
+//                    mHandler.post(mRunnable); // Start the Runnable
+            } else {
+                stopScan();
+//                    mHandler.removeCallbacks(mRunnable); // Stop the Runnable
             }
+            isScanning = !isScanning;
         });
     }
 
@@ -209,18 +160,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void startScan() {
         Log.d(TAG, "Inside start scan");
-        devices.clear();
 
         scanButton.setText("Stop Scan");
         int color = Color.parseColor("#FFF44336"); // Parse the color code
         scanButton.setBackgroundColor(color);
         bluetoothAdapter.startLeScan(mLeScanCallback);
 
-        long timestamp = System.currentTimeMillis();
-        uniqueDevices = new HashMap<>();
-        scans.put(timestamp, uniqueDevices);
-
-//        mHandler.post(mRunnable); // Start the Runnable
+        mHandler.post(mRunnable); // Start the Runnable
     }
 
     private void stopScan() {
@@ -230,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
         int color = Color.parseColor("#FF4CAF50"); // Parse the color code
         scanButton.setBackgroundColor(color);
 
-//        mHandler.removeCallbacks(mRunnable); // Stop the Runnable
+        mHandler.removeCallbacks(mRunnable); // Stop the Runnable
         bluetoothAdapter.stopLeScan(mLeScanCallback);
     }
 
@@ -243,40 +189,8 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void updateDeviceInfo(final String info) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                deviceInfos.append("\n" + info);
-            }
-        });
-    }
-
-//    private void displayPairedDevices() {
-//        deviceInfos.setText("");
-//        deviceInfos.append("Paired Devices\n\n");
-//        if (bluetoothAdapter.isEnabled()) {
-//            Set<BluetoothDevice> devices = bluetoothAdapter.getBondedDevices();
-//
-//            for (BluetoothDevice device : devices) {
-//                deviceInfos.append("\n Device : " + device.getName() + " , " + device);
-//            }
-//        } else {
-//            Log.d(TAG, "Turn On bluetooth to get paired devices");
-//        }
-//    }
-
-    private void checkLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            // Permission is not granted, request it
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    REQUEST_FINE_LOCATION_PERMISSION);
-        }
-    }
-
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission was granted, request next permission
@@ -286,14 +200,11 @@ public class MainActivity extends AppCompatActivity {
                 // Permission was denied. You can handle it here.
                 new AlertDialog.Builder(this)
                         .setMessage("This permission is important for the app.")
-                        .setPositiveButton("Open Settings", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            }
+                        .setPositiveButton("Open Settings", (dialog, which) -> {
+                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            Uri uri = Uri.fromParts("package", getPackageName(), null);
+                            intent.setData(uri);
+                            startActivity(intent);
                         })
                         .setNegativeButton("Cancel", null)
                         .create()
@@ -323,20 +234,51 @@ public class MainActivity extends AppCompatActivity {
 //                    requestNextPermission();
                 }
 
-                } else {
+            } else {
                 permissionIndex++;
                 requestNextPermission();
             }
         }
-//        while (ContextCompat.checkSelfPermission(this, permissions[permissionIndex]) != PackageManager.PERMISSION_GRANTED) {
-//            // Permission is not granted, request for permission
-//            ActivityCompat.requestPermissions(this, new String[]{permissions[permissionIndex]}, REQUEST_CODE);
-//        }
-//        // Permission is granted, move to next permission
-//        permissionIndex++;
-//        if (permissionIndex < permissions.length) {
-//            requestNextPermission();
-//        }
     }
 
+    private void addToListView() {
+//        listView.setAdapter(null);
+        adapter.clear();    // this is required, otherwise list will be duplicated
+
+        if (uniqueDevices.size() == 0) {
+            showInListView();
+            return;
+        }
+
+        long timestamp = System.currentTimeMillis();
+        Map<String, DeviceInfo> uniqueDevicesCopy = new TreeMap<>(uniqueDevices);
+
+        scans.put(timestamp, uniqueDevicesCopy);
+//        uniqueDevices.clear();
+
+        showInListView();
+
+    }
+
+    private  void showInListView() {
+        for (Map.Entry<Long, Map<String, DeviceInfo>> scan : scans.entrySet()) {
+//            String item = String.valueOf(scan.getKey()) + "\n";
+            long diff = System.currentTimeMillis() - scan.getKey();
+            double diffInMinutesDouble = (double) diff / (1000 * 6);
+            int diffInMinutes = (int) Math.floor(diffInMinutesDouble);
+
+            String item = String.valueOf(diffInMinutes) + " min ago\n";
+            for (Map.Entry<String, DeviceInfo> entry : scan.getValue().entrySet()) {
+                String address = entry.getKey();
+                DeviceInfo rssi = entry.getValue();
+
+                item += rssi.getRssi() + " -- " + address + "\n";
+            }
+            item += "\n";
+            adapter.add(item);
+        }
+        adapter.notifyDataSetChanged();
+        uniqueDevices.clear();
+        devices.clear();
+    }
 }
