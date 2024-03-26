@@ -17,11 +17,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -56,13 +54,14 @@ public class MainActivity extends AppCompatActivity {
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bluetoothLeScanner;
-    private TextView deviceInfos;
     private Button scanButton;
     private ListView listView;
     private boolean isScanning = false;
-    private boolean firstTime = true;
     ArrayAdapter<String> adapter;
 
+    private int delay = 3000;
+
+    private boolean first = true;
 
 
     private ArrayList<BluetoothDevice> devices = new ArrayList<>();
@@ -75,7 +74,11 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void run() {
             addToListView();
-            mHandler.postDelayed(this, 6000);
+            if (first) {
+                mHandler.postDelayed(this, delay);
+                first = false;
+            } else
+                mHandler.postDelayed(this, delay + 60000);
         }
     };
 
@@ -101,24 +104,20 @@ public class MainActivity extends AppCompatActivity {
 
         requestNextPermission();
 
-//        deviceInfos = findViewById(R.id.DeviceInfos);
         scanButton = findViewById(R.id.ScanButton);
         listView = findViewById(R.id.listView);
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
-            // Device doesn't support Bluetooth
             finish();
             return;
         }
         if (!isLocationEnabled()) {
-            // Request to enable Location Services if it's disabled
             Intent enableLocationIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
             startActivity(enableLocationIntent);
         }
 
         if (!bluetoothAdapter.isEnabled()) {
-            // Request to enable Bluetooth if it's disabled
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH);
         }
@@ -135,14 +134,9 @@ public class MainActivity extends AppCompatActivity {
         listView.setAdapter(adapter);
 
 
-//        displayPairedDevices();
         scanButton.setOnClickListener(v -> {
             if (!isScanning) {
                 startScan();
-                if (firstTime) {
-//                    addToListView();
-                    firstTime = false;
-                }
             } else {
                 stopScan();
             }
@@ -155,19 +149,19 @@ public class MainActivity extends AppCompatActivity {
     private void startScan() {
 
         scanButton.setText("Stop Scan");
-        int color = Color.parseColor("#FFF44336"); // Parse the color code
+        int color = Color.parseColor("#FFF44336");
         scanButton.setBackgroundColor(color);
 
         bluetoothLeScanner.startScan(mScanCallback);
 
-        mHandler.post(mRunnable); // Start the Runnable
+        mHandler.post(mRunnable);
     }
     private void stopScan() {
         scanButton.setText("Start Scan");
-        int color = Color.parseColor("#FF4CAF50"); // Parse the color code
+        int color = Color.parseColor("#FF4CAF50");
         scanButton.setBackgroundColor(color);
 
-        mHandler.removeCallbacks(mRunnable); // Stop the Runnable
+        mHandler.removeCallbacks(mRunnable);
 
         bluetoothLeScanner.stopScan(mScanCallback);
     }
@@ -189,7 +183,6 @@ public class MainActivity extends AppCompatActivity {
                 permissionIndex++;
                 requestNextPermission();
             } else {
-                // Permission was denied. You can handle it here.
                 new AlertDialog.Builder(this)
                         .setMessage("This permission is important for the app.")
                         .setPositiveButton("Open Settings", (dialog, which) -> {
@@ -208,7 +201,7 @@ public class MainActivity extends AppCompatActivity {
 
     protected void onDestroy() {
         super.onDestroy();
-//        stopScan();
+        stopScan();
     }
 
     private void requestNextPermission() {
@@ -229,8 +222,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addToListView() {
-//        listView.setAdapter(null);
-        adapter.clear();    // this is required, otherwise list will be duplicated
+        adapter.clear();
 
         if (uniqueDevices.size() == 0) {
             showInListView();
@@ -238,21 +230,20 @@ public class MainActivity extends AppCompatActivity {
         }
 
         long timestamp = System.currentTimeMillis();
+
         Map<String, DeviceInfo> uniqueDevicesCopy = new TreeMap<>(uniqueDevices);
 
         scans.put(timestamp, uniqueDevicesCopy);
-//        uniqueDevices.clear();
-
         showInListView();
 
     }
 
     private  void showInListView() {
         for (Map.Entry<Long, Map<String, DeviceInfo>> scan : scans.entrySet()) {
-//            String item = String.valueOf(scan.getKey()) + "\n";
             long diff = System.currentTimeMillis() - scan.getKey();
-            double diffInMinutesDouble = (double) diff / (1000 * 6);
+            double diffInMinutesDouble = (double) diff / (1000 * 60);
             int diffInMinutes = (int) Math.floor(diffInMinutesDouble);
+
 
             String item = String.valueOf(diffInMinutes) + " min ago\n";
             for (Map.Entry<String, DeviceInfo> entry : scan.getValue().entrySet()) {
