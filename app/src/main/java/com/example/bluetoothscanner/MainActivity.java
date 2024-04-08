@@ -175,29 +175,29 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission was granted, request next permission
-                permissionIndex++;
-                requestNextPermission();
-            } else {
-                new AlertDialog.Builder(this)
-                        .setMessage("This permission is important for the app.")
-                        .setPositiveButton("Open Settings", (dialog, which) -> {
-                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                            Uri uri = Uri.fromParts("package", getPackageName(), null);
-                            intent.setData(uri);
-                            startActivity(intent);
-                        })
-                        .setNegativeButton("Cancel", null)
-                        .create()
-                        .show();
-
-            }
-        }
-    }
+//    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+//        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+//        if (requestCode == REQUEST_CODE) {
+//            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+//                // Permission was granted, request next permission
+//                permissionIndex++;
+//                requestNextPermission();
+//            } else {
+//                new AlertDialog.Builder(this)
+//                        .setMessage("This permission is important for the app.")
+//                        .setPositiveButton("Open Settings", (dialog, which) -> {
+//                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+//                            Uri uri = Uri.fromParts("package", getPackageName(), null);
+//                            intent.setData(uri);
+//                            startActivity(intent);
+//                        })
+//                        .setNegativeButton("Cancel", null)
+//                        .create()
+//                        .show();
+//
+//            }
+//        }
+//    }
 
     protected void onDestroy() {
         super.onDestroy();
@@ -208,11 +208,11 @@ public class MainActivity extends AppCompatActivity {
         if (permissionIndex < permissions.length) {
             if (ContextCompat.checkSelfPermission(this, permissions[permissionIndex]) != PackageManager.PERMISSION_GRANTED) {
                 // Permission is not granted, request for permission
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[permissionIndex])) {
-
-                } else {
+//                if (ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[permissionIndex])) {
+//
+//                } else {
                     ActivityCompat.requestPermissions(this, new String[]{permissions[permissionIndex]}, REQUEST_CODE);
-                }
+//                }
 
             } else {
                 permissionIndex++;
